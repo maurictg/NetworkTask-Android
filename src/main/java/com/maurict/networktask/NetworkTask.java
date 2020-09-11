@@ -10,7 +10,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.net.UnknownHostException;
 import java.util.HashMap;
 
 /**
@@ -24,8 +24,10 @@ public class NetworkTask {
     private HashMap<String, String> parameters;
     private HashMap<String, String> formData;
 
-    private static final String TAG = NetworkTask.class.getSimpleName();
+    private String responseMessage;
+    private int responseStatus;
 
+    private static final String TAG = NetworkTask.class.getSimpleName();
 
     /**
      * Create new instance of NetworkTask
@@ -36,7 +38,7 @@ public class NetworkTask {
         this.headers = new HashMap<>();
         this.parameters = new HashMap<>();
         this.formData = new HashMap<>();
-        this.requestUrl = url;
+        this.requestUrl = "https://stoverstag.nl/api" + url;
         this.requestMethod = requestMethod;
     }
 
@@ -46,25 +48,6 @@ public class NetworkTask {
      */
     public NetworkTask(String url) {
         this(url, RequestMethod.GET);
-    }
-
-    /**
-     * Static method to create NetworkTask for chaining
-     * @param url The url
-     * @return NetworkTask
-     */
-    public static NetworkTask fromUrl(String url) {
-        return new NetworkTask(url);
-    }
-
-    /**
-     * Create NetworkTask from url and requestMethod for chaining
-     * @param url The url to be called
-     * @param method The method
-     * @return NetworkTask
-     */
-    public static NetworkTask fromUrl(String url, RequestMethod method) {
-        return new NetworkTask(url).withRequestMethod(method);
     }
 
     /**
@@ -84,27 +67,6 @@ public class NetworkTask {
     public void addHeader(String key, String value) { this.headers.put(key, value); }
     public void addParameter(String key, String value) { this.parameters.put(key, value); }
     public void addFormData(String key, String value) { this.formData.put(key, value); }
-
-    //Chaining methods for header, parameter, formdata and request methods
-    public NetworkTask withHeader(String key, String value) {
-        this.addHeader(key, value);
-        return this;
-    }
-
-    public NetworkTask withParameter(String key, String value) {
-        this.addParameter(key, value);
-        return this;
-    }
-
-    public NetworkTask withFormData(String key, String value) {
-        this.addFormData(key, value);
-        return this;
-    }
-
-    public NetworkTask withRequestMethod(RequestMethod method) {
-        this.requestMethod = method;
-        return this;
-    }
 
     /**
      * Execute task and get result via callback. Use Lambda function for callback
@@ -174,8 +136,11 @@ public class NetworkTask {
                 }
 
                 //Read response
-                Log.d(TAG, "Reading response: "+connection.getResponseCode());
-                Log.d(TAG, "Response message: "+connection.getResponseMessage());
+                responseMessage = connection.getResponseMessage();
+                responseStatus = connection.getResponseCode();
+
+                Log.d(TAG, "Reading response: "+responseStatus);
+                Log.d(TAG, "Response message: "+responseMessage);
 
                 InputStream is = connection.getInputStream();
                 ByteArrayOutputStream buffer = new ByteArrayOutputStream();
@@ -188,23 +153,17 @@ public class NetworkTask {
                 buffer.flush();
                 Log.d(TAG, "Flushed binary data. Returning BinaryData object");
 
-                HashMap<String, String> responseHeaders = new HashMap<>();
-                connection.getHeaderFields().forEach((k,v) -> {
-                    Log.d(TAG, "k: "+k+ " - v: "+v);
-                    responseHeaders.put(k, connection.getHeaderField(k));
-                });
-
-                //Create and return new NetworkResult object. See BinaryData.java
-                NetworkResult result = new NetworkResult(data);
-                result.setResponseHeaders(responseHeaders);
-                return result;
+                //Create and return new BinaryData object. See BinaryData.java
+                return new NetworkResult(data, responseStatus);
 
             } catch (Exception e) {
+                if(e instanceof UnknownHostException) {
+                    return new NetworkResult(-1);
+                }
+
                 e.printStackTrace();
                 Log.e(TAG, "Failed to get data: " + e.getMessage());
-
-                //Return error
-                return new NetworkResult(e);
+                return new NetworkResult(responseStatus);
             }
         }
 
